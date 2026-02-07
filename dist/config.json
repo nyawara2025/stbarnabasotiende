@@ -1,0 +1,200 @@
+{
+  "identity": {
+    "orgId": 2,
+    "name": "St. Barnabas Anglican Church, Otiende",
+    "shortName": "St. Barnabas",
+    "description": "Church community platform for St. Barnabas Anglican Church, Otiende - Langata, Nairobi",
+    "logoUrl": "/logos/stbarnabas.png",
+    "website": "https://stbarnabasotiende.org"
+  },
+  "theme": {
+    "mode": "light",
+    "colors": {
+      "primary": "#7C3AED",
+      "secondary": "#1F2937",
+      "accent": "#059669",
+      "background": "#F3F4F6",
+      "surface": "#FFFFFF",
+      "text": "#1F2937",
+      "textLight": "#6B7280",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444",
+      "info": "#3B82F6"
+    },
+    "borderRadius": "rounded-lg",
+    "fontFamily": "Inter, system-ui, sans-serif"
+  },
+  "labels": {
+    "entityName": "Member",
+    "entityNamePlural": "Members",
+    "adminName": "Administrator",
+    "adminNamePlural": "Administrators",
+    "marketplaceName": "Sokoni",
+    "broadcastName": "Broadcasts",
+    "announcementName": "Notices",
+    "complaintName": "Opinions",
+    "paymentName": "Contributions",
+    "welcomeMessage": "Welcome to St. Barnabas Church",
+    "loginPrompt": "Enter your phone number to access the member portal",
+    "noDataMessage": "No records found",
+    "loadingMessage": "Loading...",
+    "homeLabel": "Home",
+    "broadcastsLabel": "Broadcasts",
+    "announcementsLabel": "Notices",
+    "marketplaceLabel": "Sokoni",
+    "profileLabel": "My Profile",
+    "supportLabel": "Support",
+    "sermonsLabel": "Sermons"
+  },
+  "church": {
+    "zones": [
+      { "id": 1, "name": "Mt. Olive" },
+      { "id": 2, "name": "Mt. Sinai" },
+      { "id": 3, "name": "Nazareth" },
+      { "id": 4, "name": "Mt. Horeb" },
+      { "id": 5, "name": "Bethlehem" },
+      { "id": 6, "name": "Jerusalem" },
+      { "id": 7, "name": "Canaan" }
+    ],
+    "ministries": [
+      { "id": 1, "name": "Youth" },
+      { "id": 2, "name": "Women" },
+      { "id": 3, "name": "Men" },
+      { "id": 4, "name": "Children" }
+    ],
+    "services": [
+      { "id": 1, "name": "Youth Service", "time": "8:00 AM - 9:30 AM", "day": "Sunday" },
+      { "id": 2, "name": "English Service", "time": "10:00 AM - 12:00 PM", "day": "Sunday" },
+      { "id": 3, "name": "Swahili Service", "time": "12:30 PM - 2:00 PM", "day": "Sunday" }
+    ]
+  },
+  "features": {
+    "marketplace": true,
+    "payments": true,
+    "complaints": true,
+    "broadcasts": true,
+    "announcements": true,
+    "chat": true,
+    "myInquiries": true,
+    "vacantHouses": false,
+    "shareOpinion": true,
+    "allowGuestAccess": false,
+    "groupManagement": true,
+    "events": true,
+    "directory": true,
+    "meetingNotes": true,
+    "finance": true,
+    "sermons": true,
+    "paymentHistory": true,
+    "bankReconciliation": true
+  },
+  "modules": {
+    "auth": {
+      "method": "phone",
+      "requireApproval": false,
+      "requireMemberId": true,
+      "requireApartmentId": false,
+      "autoApprove": true,
+      "roles": ["member", "admin", "treasurer", "zone_leader", "ministry_leader", "clergy"]
+    },
+    "marketplace": {
+      "name": "Sokoni",
+      "categories": ["Items", "Services", "Announcements"],
+      "allowServices": true,
+      "enableInquiries": true,
+      "enableResponses": true,
+      "requireAdminApproval": false
+    },
+    "broadcasts": {
+      "adminOnly": false,
+      "allowReplies": true,
+      "maxMessageLength": 2000,
+      "categories": ["General", "Zone", "Ministry", "Urgent"],
+      "targetGroups": ["all", "zone", "ministry", "service"]
+    },
+    "announcements": {
+      "adminOnly": true,
+      "priorityLevels": ["Normal", "Important", "Urgent"],
+      "showExpiry": true
+    },
+    "payments": {
+      "name": "Contributions",
+      "categories": [
+        "Tithe",
+        "Offering",
+        "Building Fund",
+        "Mission Fund",
+        "Welfare Fund",
+        "Special Appeal",
+        "Thanksgiving",
+        "Harambee"
+      ],
+      "allowOffline": true,
+      "receiptEnabled": true,
+      "anonymousAllowed": true,
+      "treasurerFeatures": {
+        "viewAllAccounts": true,
+        "bankReconciliation": true,
+        "createReceipts": true,
+        "exportReports": true
+      }
+    },
+    "sermons": {
+      "enabled": true,
+      "name": "Sermons",
+      "categories": ["Sunday Sermon", "Bible Study", "Special Service", "Youth Teaching"],
+      "allowAudio": true,
+      "allowVideo": true,
+      "allowNotes": true
+    },
+    "meetingNotes": {
+      "enabled": true,
+      "name": "Meeting Notes",
+      "categories": ["PCC Minutes", "Zone Meetings", "Ministry Meetings", "AGM", "Reports"],
+      "allowUpload": true,
+      "requireAdminApproval": true
+    },
+    "events": {
+      "enabled": true,
+      "name": "Events",
+      "categories": ["Service", "Fellowship", "Outreach", "Training", "Fundraiser", "Zone Event", "Ministry Event"],
+      "requireRegistration": false,
+      "maxAttendees": false
+    },
+    "support": {
+      "contactEmail": "info@stbarnabasotiende.org",
+      "whatsappNumber": "+254700000000",
+      "officeHours": "Mon-Fri: 9AM-5PM",
+      "churchOffice": "Otiende, Langata - Nairobi"
+    }
+  },
+  "api": {
+    "webhookBaseUrl": "https://n8n.tenear.com/webhook",
+    "headers": {
+      "x-app-version": "1.0.0",
+      "x-org-id": 2
+    }
+  },
+  "navigation": {
+    "showBottomNav": true,
+    "showHeader": true,
+    "menuOrder": ["home", "sermons", "finance", "broadcasts", "events", "meetingNotes", "chat", "marketplace", "profile"],
+    "quickActions": ["pay", "sermons", "chat"]
+  },
+  "branding": {
+    "tagline": "Growing in Faith Together",
+    "verseOfTheDay": true,
+    "socialMedia": {
+      "website": "https://stbarnabasotiende.org",
+      "facebook": "",
+      "youtube": ""
+    }
+  },
+  "localization": {
+    "timezone": "Africa/Nairobi",
+    "language": "en",
+    "dateFormat": "DD/MM/YYYY",
+    "currency": "KES"
+  }
+}

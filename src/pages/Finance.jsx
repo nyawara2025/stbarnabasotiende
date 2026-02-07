@@ -1,0 +1,1217 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getStoredUser, getPaymentHistory, initiateSTKPush, checkPaymentStatus, recordPayment, cachedConfig } from '../utils/apiClient';
+import { API_ENDPOINTS } from '../config/apiConfig';
+
+const Finance = () => {
+  const navigate = useNavigate();
+  const user = getStoredUser();
+  
+  // State for balance and transactions
+  const [balance, setBalance] = useState({ current: 0, due: 0, paid: 0, totalPaid: 0 });
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  
+  // Payment form state
+  const [paymentCategory, setPaymentCategory] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState('idle'); // idle, initiating, processing, success, failed
+  const [statusMessage, setStatusMessage] = useState('');
+  
+  // Get configuration
+  const getConfig = () => {
+    try {
+      if (window.config) {
+        return {
+          categories: window.config.modules?.payments?.categories || [],
+          currency: window.config.localization?.currency || 'KES',
+          primaryColor: window.config.theme?.colors?.primary || '#E31C23',
+          secondaryColor: window.config.theme?.colors?.secondary || '#1F2937',
+          orgName: window.config.identity?.name || '',
+          shortName: window.config.identity?.shortName || '',
+        };
+      }
+    } catch (e) {
+      console.warn('Could not load config:', e);
+    }
+    return {
+      categories: [],
+      currency: 'KES',
+      primaryColor: '#E31C23',
+      secondaryColor: '#1F2937',
+      orgName: '',
+      shortName: '',
+    };
+  };
+
+  const config = getConfig();
+  const isAdmin = user?.role === 'treasurer' || user?.role === 'admin' || user?.role === 'super_admin';
+
+  // Load financial data
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadData = async () => {
+      try {
+        // Fetch payment history from API
+        const history = await getPaymentHistory();
+        
+        if (!isMounted) return;
+        
+        // Process transactions and calculate totals
+        const processedTransactions = (history || []).map((tx, index) => ({
+          ...tx,
+          id: tx.id || index + 1,
+          type: tx.type || (tx.amount > 0 ? 'in' : 'out'),
+          date: tx.payment_date || tx.created_at || tx.date,
+          description: tx.description || tx.category || 'Contribution',
+          reference: tx.reference || tx.mpesa_code || tx.transaction_id || 'N/A',
+          status: tx.status || 'completed'
+        })).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        setTransactions(processedTransactions);
+
+        // Calculate totals from real data
+        const totalPaid = processedTransactions
+          .filter(tx => tx.type === 'in' && tx.status === 'completed')
+          .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+        
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        const thisMonthPaid = processedTransactions
+          .filter(tx => {
+            const txDate = new Date(tx.date);
+            return tx.type === 'in' && txDate.getMonth() === currentMonth && 
+                   txDate.getFullYear() === currentYear && tx.status === 'completed';
+          })
+          .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+
+        setBalance({
+          current: totalPaid,
+          due: 0,
+          paid: thisMonthPaid,
+          totalPaid: totalPaid
+        });
+
+        setLoading(false);
+      } catch (err) {
+        console.error('Error loading finance data:', err);
+        if (!isMounted) return;
+        setBalance({
+          current: 0,
+          due: 0,
+          paid: 0,
+          totalPaid: 0
+        });
+        setTransactions([]);
+        setLoading(false);
+      }
+    };
+
+    // Wait for config to be available
+    const checkAndLoad = () => {
+      if (window.config || cachedConfig) {
+        loadData();
+      } else {
+        // Check again in 50ms
+        setTimeout(checkAndLoad, 50);
+      }
+    };
+
+    checkAndLoad();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Set default phone number from user profile
+  useEffect(() => {
+    if (user?.phone) {
+      // Format phone number if needed
+      let phone = user.phone;
+      if (phone.startsWith('0')) {
+        phone = '254' + phone.substring(1);
+      }
+      setPhoneNumber(phone);
+    }
+  }, [user]);
+
+  // Handle category change - auto set amount
+  const handleCategoryChange = (category) => {
+    setPaymentCategory(category);
+    // Amount should come from payment_categories API, not config
+    setPaymentAmount('');
+  };
+
+  // Format phone number for M-PESA
+  const formatPhoneNumber = (phone) => {
+    let formatted = phone.replace(/\D/g, '');
+    if (formatted.startsWith('0')) {
+      formatted = '254' + formatted.substring(1);
+    }
+    if (formatted.startsWith('7') || formatted.startsWith('1')) {
+      formatted = '254' + formatted;
+    }
+    return formatted;
+  };
+
+  // Handle M-PESA payment
+  const handlePayment = async () => {
+    if (!paymentAmount || parseFloat(paymentAmount) < 10) {
+      setStatusMessage('Please enter a valid amount (minimum 10)');
+      return;
+    }
+
+    if (!phoneNumber || phoneNumber.length < 9) {
+      setStatusMessage('Please enter a valid phone number');
+      return;
+    }
+
+    setPaymentStatus('initiating');
+    setStatusMessage('Initiating payment...');
+
+    try {
+      const formattedPhone = formatPhoneNumber(phoneNumber);
+      const accountReference = `${config.shortName.replace(/\s/g, '')}-${Date.now()}`;
+      
+      // Initiate STK Push
+      const response = await initiateSTKPush(formattedPhone, paymentAmount, accountReference);
+      
+      if (response.success || response.CheckoutRequestID) {
+        setPaymentStatus('processing');
+        setStatusMessage('Check your phone for the M-PESA prompt...');
+        
+        // Poll for payment status
+        await pollPaymentStatus(response.CheckoutRequestID || response.checkoutRequestId);
+      } else {
+        setPaymentStatus('failed');
+        setStatusMessage(response.message || 'Payment initiation failed');
+      }
+    } catch (err) {
+      console.error('Payment error:', err);
+      setPaymentStatus('failed');
+      setStatusMessage(err.message || 'Failed to initiate payment. Please try again.');
+    }
+  };
+
+  // Poll payment status
+  const pollPaymentStatus = async (checkoutRequestId, attempts = 0) => {
+    const maxAttempts = 20; // About 60 seconds
+    
+    if (attempts >= maxAttempts) {
+      setPaymentStatus('failed');
+      setStatusMessage('Payment timeout. Please check your M-PESA and try again.');
+      return;
+    }
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      const status = await checkPaymentStatus(checkoutRequestId);
+      
+      if (status.success) {
+        setPaymentStatus('success');
+        setStatusMessage('Payment successful!');
+        
+        // Record the payment locally
+        const newTransaction = {
+          id: Date.now(),
+          type: 'in',
+          amount: parseFloat(paymentAmount),
+          description: paymentCategory,
+          category: paymentCategory,
+          date: new Date().toISOString(),
+          reference: status.transactionId || status.MpesaReceiptNumber || 'PENDING',
+          phone: phoneNumber,
+          notes: paymentNotes,
+          status: 'completed'
+        };
+        
+        setTransactions(prev => [newTransaction, ...prev]);
+        setBalance(prev => ({
+          ...prev,
+          current: prev.current + parseFloat(paymentAmount),
+          totalPaid: prev.totalPaid + parseFloat(paymentAmount),
+          paid: prev.paid + parseFloat(paymentAmount),
+          due: Math.max(0, prev.due - parseFloat(paymentAmount))
+        }));
+
+        // Show receipt after a short delay
+        setTimeout(() => {
+          setSelectedTransaction(newTransaction);
+          setShowPaymentModal(false);
+          setShowReceiptModal(true);
+        }, 1500);
+
+      } else if (status.status === 'pending' || status.resultCode === '1037') {
+        // Still processing
+        await pollPaymentStatus(checkoutRequestId, attempts + 1);
+      } else {
+        setPaymentStatus('failed');
+        setStatusMessage(status.message || 'Payment was cancelled or failed');
+      }
+    } catch (err) {
+      console.error('Status check error:', err);
+      await pollPaymentStatus(checkoutRequestId, attempts + 1);
+    }
+  };
+
+  // Handle offline payment recording (for admin or manual entries)
+  const handleOfflinePayment = async () => {
+    if (!paymentAmount || parseFloat(paymentAmount) < 10) {
+      setStatusMessage('Please enter a valid amount');
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      await recordPayment({
+        amount: parseFloat(paymentAmount),
+        paymentMethod: 'offline',
+        reference: `OFFLINE-${Date.now()}`,
+        notes: `${paymentCategory}: ${paymentNotes}`
+      });
+      
+      setStatusMessage('Payment recorded successfully');
+      setShowPaymentModal(false);
+      loadData(); // Reload data
+    } catch (err) {
+      setStatusMessage('Failed to record payment');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Reload data helper
+  const loadData = async () => {
+    setLoading(true);
+    const history = await getPaymentHistory();
+    // Process and set transactions...
+    setLoading(false);
+  };
+
+  // Format currency
+  const formatCurrency = (amount) => {
+    return `${config.currency} ${parseFloat(amount || 0).toLocaleString()}`;
+  };
+
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-KE', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Get status badge color
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed': return '#10B981';
+      case 'pending': return '#F59E0B';
+      case 'failed': return '#EF4444';
+      default: return '#6B7280';
+    }
+  };
+
+  // Calculate monthly progress
+  const monthlyAmount = 0; // Should come from payment_categories API
+  const progressPercent = monthlyAmount > 0 ? Math.min(100, (balance.paid / monthlyAmount) * 100) : 0;
+
+  // Open receipt modal
+  const openReceipt = (transaction) => {
+    setSelectedTransaction(transaction);
+    setShowReceiptModal(true);
+  };
+
+  // Print receipt
+  const printReceipt = () => {
+    window.print();
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '60px 20px',
+        color: '#6B7280'
+      }}>
+        <div style={{
+          width: '32px',
+          height: '32px',
+          border: '3px solid #e5e7eb',
+          borderTopColor: config.primaryColor,
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          marginBottom: '12px'
+        }} />
+        <p>Loading financial data...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '16px', paddingBottom: '80px' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '20px' }}>
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: config.primaryColor,
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            marginBottom: '12px',
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px'
+          }}
+        >
+          ← Back
+        </button>
+        <h1 style={{ 
+          margin: 0, 
+          fontSize: '1.5rem', 
+          fontWeight: 700,
+          color: '#1F2937'
+        }}>
+          💰 {config.modules?.payments?.name || 'Contributions'}
+        </h1>
+        <p style={{ 
+          margin: '4px 0 0', 
+          color: '#6B7280',
+          fontSize: '0.875rem'
+        }}>
+          Manage your welfare contributions and view transaction history
+        </p>
+      </div>
+
+      {/* Balance Card */}
+      <div style={{
+        background: `linear-gradient(135deg, ${config.primaryColor} 0%, ${config.secondaryColor} 100%)`,
+        borderRadius: '20px',
+        padding: '24px',
+        color: 'white',
+        marginBottom: '24px',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        {/* Decorative circles */}
+        <div style={{
+          position: 'absolute',
+          top: '-30px',
+          right: '-30px',
+          width: '120px',
+          height: '120px',
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.1)'
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '-20px',
+          left: '-20px',
+          width: '80px',
+          height: '80px',
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.05)'
+        }} />
+
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <p style={{ 
+            margin: 0, 
+            fontSize: '0.875rem', 
+            opacity: 0.9,
+            marginBottom: '4px'
+          }}>
+            Total Contributions
+          </p>
+          <h2 style={{ 
+            margin: 0, 
+            fontSize: '2rem', 
+            fontWeight: 700,
+            marginBottom: '16px'
+          }}>
+            {formatCurrency(balance.totalPaid)}
+          </h2>
+
+          {/* Monthly Progress */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between',
+              marginBottom: '8px',
+              fontSize: '0.875rem'
+            }}>
+              <span>Monthly Progress</span>
+              <span>{formatCurrency(balance.paid)}</span>
+            </div>
+            <div style={{
+              width: '100%',
+              height: '8px',
+              background: 'rgba(255,255,255,0.2)',
+              borderRadius: '4px',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${progressPercent}%`,
+                height: '100%',
+                background: 'white',
+                borderRadius: '4px',
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
+          </div>
+
+          {/* Status Badge */}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px',
+            flexWrap: 'wrap'
+          }}>
+            <span style={{
+              background: monthlyAmount > 0 && balance.paid >= monthlyAmount ? '#10B981' : '#F59E0B',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              fontSize: '0.8rem',
+              fontWeight: 600
+            }}>
+              {balance.totalPaid > 0 ? '✅ View History' : 'No contributions yet'}
+            </span>
+            {balance.totalPaid > 0 && (
+              <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                {transactions.filter(t => t.type === 'in').length} payments made
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: isAdmin ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', 
+        gap: '12px',
+        marginBottom: '24px'
+      }}>
+        <button
+          onClick={() => {
+            setPaymentCategory('Monthly Kitty');
+            setPaymentAmount('');
+            setPaymentStatus('idle');
+            setStatusMessage('');
+            setShowPaymentModal(true);
+          }}
+          style={{
+            background: config.primaryColor,
+            color: 'white',
+            border: 'none',
+            borderRadius: '12px',
+            padding: '16px 12px',
+            cursor: 'pointer',
+            textAlign: 'center',
+            fontWeight: 600,
+            fontSize: '0.85rem',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <span style={{ fontSize: '1.5rem' }}>💸</span>
+          Pay Monthly
+        </button>
+        <button
+          onClick={() => {
+            setPaymentCategory('Special Appeal');
+            setPaymentAmount('');
+            setPaymentStatus('idle');
+            setStatusMessage('');
+            setShowPaymentModal(true);
+          }}
+          style={{
+            background: 'white',
+            color: config.primaryColor,
+            border: `1px solid ${config.primaryColor}`,
+            borderRadius: '12px',
+            padding: '16px 12px',
+            cursor: 'pointer',
+            textAlign: 'center',
+            fontWeight: 600,
+            fontSize: '0.85rem',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <span style={{ fontSize: '1.5rem' }}>🎁</span>
+          Special Appeal
+        </button>
+        {isAdmin && (
+          <button
+            onClick={() => {
+              setPaymentCategory('Event Fund');
+              setPaymentAmount('');
+              setPaymentStatus('idle');
+              setStatusMessage('');
+              setShowPaymentModal(true);
+            }}
+            style={{
+              background: '#8B5CF6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '16px 12px',
+              cursor: 'pointer',
+              textAlign: 'center',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '1.5rem' }}>📊</span>
+            Admin Entry
+          </button>
+        )}
+      </div>
+
+      {/* Transaction History */}
+      <div style={{
+        background: 'white',
+        borderRadius: '16px',
+        padding: '20px',
+        border: '1px solid #e5e7eb'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '16px'
+        }}>
+          <h3 style={{ 
+            margin: 0, 
+            fontSize: '1rem', 
+            fontWeight: 600,
+            color: '#1F2937'
+          }}>
+            📋 Transaction History
+          </h3>
+          <span style={{ 
+            fontSize: '0.8rem', 
+            color: '#6B7280',
+            background: '#f3f4f6',
+            padding: '4px 10px',
+            borderRadius: '12px'
+          }}>
+            {transactions.length} transactions
+          </span>
+        </div>
+
+        {transactions.length === 0 ? (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '40px 20px', 
+            color: '#6B7280' 
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📭</div>
+            <p style={{ margin: 0 }}>No transactions yet</p>
+            <p style={{ margin: '8px 0 0', fontSize: '0.875rem' }}>
+              Make your first contribution using the buttons above
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {transactions.slice(0, 10).map((tx) => (
+              <div 
+                key={tx.id}
+                onClick={() => openReceipt(tx)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 12px',
+                  background: '#f9fafb',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: tx.type === 'in' ? '#d1fae5' : '#fee2e2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.1rem',
+                    flexShrink: 0
+                  }}>
+                    {tx.type === 'in' ? '↓' : '↑'}
+                  </div>
+                  <div>
+                    <p style={{ 
+                      margin: 0, 
+                      fontSize: '0.9rem', 
+                      fontWeight: 500,
+                      color: '#1F2937'
+                    }}>
+                      {tx.description}
+                    </p>
+                    <p style={{ 
+                      margin: '2px 0 0', 
+                      fontSize: '0.75rem', 
+                      color: '#9CA3AF'
+                    }}>
+                      {formatDate(tx.date)} • {tx.reference}
+                    </p>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{
+                    margin: 0,
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    color: tx.type === 'in' ? '#10B981' : '#EF4444'
+                  }}>
+                    {tx.type === 'in' ? '+' : '-'}{formatCurrency(tx.amount)}
+                  </p>
+                  <span style={{
+                    display: 'inline-block',
+                    marginTop: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    fontSize: '0.65rem',
+                    fontWeight: 500,
+                    background: `${getStatusColor(tx.status)}20`,
+                    color: getStatusColor(tx.status)
+                  }}>
+                    {tx.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {transactions.length > 10 && (
+          <button
+            style={{
+              width: '100%',
+              marginTop: '16px',
+              padding: '12px',
+              background: 'none',
+              border: 'none',
+              color: config.primaryColor,
+              cursor: 'pointer',
+              fontWeight: 500,
+              fontSize: '0.875rem'
+            }}
+          >
+            View All {transactions.length} Transactions →
+          </button>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        marginTop: '32px',
+        textAlign: 'center',
+        color: '#9CA3AF',
+        fontSize: '0.75rem'
+      }}>
+        <p style={{ margin: 0 }}>© 2024 {config.shortName}</p>
+        <p style={{ margin: '4px 0 0' }}>Powered by M-PESA</p>
+      </div>
+
+      {/* Payment Modal */}
+      {showPaymentModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => setShowPaymentModal(false)}>
+          <div 
+            style={{
+              background: 'white',
+              borderRadius: '20px 20px 0 0',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '500px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              animation: 'slideUp 0.3s ease'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Close button for mobile */}
+            <button
+              onClick={() => setShowPaymentModal(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                color: '#9CA3AF'
+              }}
+            >
+              ×
+            </button>
+
+            <h3 style={{ 
+              margin: '0 0 20px', 
+              fontSize: '1.25rem', 
+              fontWeight: 600,
+              color: '#1F2937'
+            }}>
+              Make a Contribution
+            </h3>
+
+            {/* Category Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                color: '#374151'
+              }}>
+                Contribution Type
+              </label>
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                {config.categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => handleCategoryChange(cat)}
+                    style={{
+                      padding: '10px 16px',
+                      borderRadius: '10px',
+                      border: paymentCategory === cat ? 'none' : '1px solid #e5e7eb',
+                      background: paymentCategory === cat ? config.primaryColor : 'white',
+                      color: paymentCategory === cat ? 'white' : '#374151',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: 500,
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Amount Input */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                color: '#374151'
+              }}>
+                Amount ({config.currency})
+              </label>
+              <input
+                type="number"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="Enter amount"
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '12px',
+                  fontSize: '1.1rem',
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            {/* Phone Number */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                color: '#374151'
+              }}>
+                Phone Number (M-PESA)
+              </label>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="254XXXXXXXXX"
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '12px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }}
+              />
+              <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: '#6B7280' }}>
+                Enter number starting with 254 or 07X
+              </p>
+            </div>
+
+            {/* Notes */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                color: '#374151'
+              }}>
+                Notes (Optional)
+              </label>
+              <input
+                type="text"
+                value={paymentNotes}
+                onChange={(e) => setPaymentNotes(e.target.value)}
+                placeholder="Add a note..."
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '10px',
+                  fontSize: '0.9rem',
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            {/* Status Message */}
+            {statusMessage && (
+              <div style={{
+                padding: '12px',
+                background: paymentStatus === 'failed' ? '#fef2f2' : paymentStatus === 'success' ? '#f0fdf4' : '#fffbeb',
+                borderRadius: '10px',
+                marginBottom: '16px',
+                fontSize: '0.875rem',
+                color: paymentStatus === 'failed' ? '#dc2626' : paymentStatus === 'success' ? '#16a34a' : '#d97706'
+              }}>
+                {statusMessage}
+              </div>
+            )}
+
+            {/* Pay Button */}
+            {isAdmin ? (
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={handlePayment}
+                  disabled={processing || paymentStatus === 'processing' || paymentStatus === 'initiating'}
+                  style={{
+                    flex: 1,
+                    padding: '16px',
+                    background: processing || paymentStatus === 'processing' || paymentStatus === 'initiating' ? '#9CA3AF' : config.primaryColor,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: (processing || paymentStatus === 'processing' || paymentStatus === 'initiating') ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {(processing || paymentStatus === 'processing' || paymentStatus === 'initiating') 
+                    ? 'Processing...' 
+                    : '📱 Send STK Push'}
+                </button>
+                <button
+                  onClick={handleOfflinePayment}
+                  disabled={processing}
+                  style={{
+                    flex: 1,
+                    padding: '16px',
+                    background: processing ? '#9CA3AF' : '#8B5CF6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: processing ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {processing ? '...' : '📝 Offline'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handlePayment}
+                disabled={processing || paymentStatus === 'processing' || paymentStatus === 'initiating'}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: (processing || paymentStatus === 'processing' || paymentStatus === 'initiating') ? '#9CA3AF' : config.primaryColor,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: (processing || paymentStatus === 'processing' || paymentStatus === 'initiating') ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                {(processing || paymentStatus === 'processing' || paymentStatus === 'initiating') ? (
+                  <>
+                    <span style={{
+                      width: '18px',
+                      height: '18px',
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: 'white',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    Processing...
+                  </>
+                ) : (
+                  <>📱 Pay {formatCurrency(paymentAmount)} via M-PESA</>
+                )}
+              </button>
+            )}
+
+            {/* M-PESA Info */}
+            <div style={{
+              marginTop: '16px',
+              padding: '12px',
+              background: '#f9fafb',
+              borderRadius: '10px',
+              fontSize: '0.8rem',
+              color: '#6B7280',
+              textAlign: 'center'
+            }}>
+              <p style={{ margin: 0 }}>
+                💡 You will receive an STK push on your phone. 
+                Enter your M-PESA PIN to complete payment.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receipt Modal */}
+      {showReceiptModal && selectedTransaction && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '16px'
+        }} onClick={() => setShowReceiptModal(false)}>
+          <div 
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '380px',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Receipt Header */}
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>✅</div>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#10B981' }}>Payment Received</h3>
+              <p style={{ margin: '4px 0 0', color: '#6B7280', fontSize: '0.875rem' }}>Official Receipt</p>
+            </div>
+
+            {/* Receipt Content */}
+            <div style={{
+              background: '#f9fafb',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '12px',
+                paddingBottom: '12px',
+                borderBottom: '1px dashed #e5e7eb'
+              }}>
+                <span style={{ color: '#6B7280', fontSize: '0.85rem' }}>Organization</span>
+                <span style={{ fontWeight: 500, fontSize: '0.85rem' }}>{config.orgName}</span>
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '12px',
+                paddingBottom: '12px',
+                borderBottom: '1px dashed #e5e7eb'
+              }}>
+                <span style={{ color: '#6B7280', fontSize: '0.85rem' }}>Date</span>
+                <span style={{ fontWeight: 500, fontSize: '0.85rem' }}>{formatDate(selectedTransaction.date)}</span>
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '12px',
+                paddingBottom: '12px',
+                borderBottom: '1px dashed #e5e7eb'
+              }}>
+                <span style={{ color: '#6B7280', fontSize: '0.85rem' }}>Reference</span>
+                <span style={{ fontWeight: 500, fontSize: '0.85rem', fontFamily: 'monospace' }}>{selectedTransaction.reference}</span>
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '12px',
+                paddingBottom: '12px',
+                borderBottom: '1px dashed #e5e7eb'
+              }}>
+                <span style={{ color: '#6B7280', fontSize: '0.85rem' }}>Category</span>
+                <span style={{ fontWeight: 500, fontSize: '0.85rem' }}>{selectedTransaction.description}</span>
+              </div>
+              {selectedTransaction.phone && (
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  marginBottom: '12px',
+                  paddingBottom: '12px',
+                  borderBottom: '1px dashed #e5e7eb'
+                }}>
+                  <span style={{ color: '#6B7280', fontSize: '0.85rem' }}>Phone</span>
+                  <span style={{ fontWeight: 500, fontSize: '0.85rem' }}>{selectedTransaction.phone}</span>
+                </div>
+              )}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                marginTop: '16px',
+                paddingTop: '16px'
+              }}>
+                <span style={{ fontWeight: 600, fontSize: '1rem' }}>Amount Paid</span>
+                <span style={{ fontWeight: 700, fontSize: '1.25rem', color: '#10B981' }}>
+                  {formatCurrency(selectedTransaction.amount)}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowReceiptModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: '#f3f4f6',
+                  color: '#374151',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+              <button
+                onClick={printReceipt}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: config.primaryColor,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                🖨️ Print
+              </button>
+            </div>
+
+            <p style={{
+              margin: '16px 0 0',
+              textAlign: 'center',
+              fontSize: '0.75rem',
+              color: '#9CA3AF'
+            }}>
+              Thank you for your contribution!
+            </p>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .receipt-print {
+            visibility: visible;
+          }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default Finance;
