@@ -1,25 +1,38 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getStoredUser, getBroadcasts, getUnreadBroadcastsCount, getActiveShops } from '../utils/apiClient';
+import { 
+  getStoredUser, 
+  getBroadcasts, 
+  getUnreadBroadcastsCount, 
+  getMemberDashboard,
+  getUpcomingServices 
+} from '../utils/apiClient';
 import { ConfigContext } from '../App';
-import SokoniModal from '../components/SokoniModal';
 
 const Home = () => {
   const navigate = useNavigate();
   const user = getStoredUser();
   const config = useContext(ConfigContext);
   
-  const [stats, setStats] = useState({
-    balance: 3500,
-    contributions: 500,
-    events: 3,
-    notices: 2
+  // Dashboard state - now fetched from backend
+  const [dashboardData, setDashboardData] = useState({
+    stats: {
+      totalContributions: 0,
+      pendingPrayers: 0,
+      upcomingMeetings: 0,
+      unreadBroadcasts: 0,
+    },
+    recentActivity: [],
+    upcomingEvents: [],
+    quickInfo: {
+      nextService: null,
+      currentSermon: null,
+    }
   });
   const [recentBroadcasts, setRecentBroadcasts] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [sokoniOpen, setSokoniOpen] = useState(false);
-  const [shops, setShops] = useState([]);
+  const [error, setError] = useState(null);
 
   // Get config values with fallbacks
   const title = config?.identity?.name || 'St. Barnabas Church';
@@ -28,7 +41,6 @@ const Home = () => {
   const secondaryColor = config?.theme?.colors?.secondary || '#1F2937';
   const paymentName = config?.labels?.paymentName || 'Contributions';
   const broadcastsLabel = config?.labels?.broadcastsLabel || 'Broadcasts';
-  const marketplaceLabel = config?.labels?.marketplaceLabel || 'Sokoni';
   const welcomeMessage = config?.labels?.welcomeMessage || `Welcome to ${title}`;
   const tagline = config?.branding?.tagline || 'Growing in Faith Together';
   const currency = config?.localization?.currency || 'KES';
@@ -39,17 +51,24 @@ const Home = () => {
   const hasMeetingNotes = features.meetingNotes !== false;
   const hasBroadcasts = features.broadcasts !== false;
   const hasAnnouncements = features.announcements !== false;
-  const hasMarketplace = features.marketplace !== false;
   const hasEvents = features.events !== false;
   const hasSermons = features.sermons !== false;
 
-  // Church specific data
-  const services = config?.church?.services || [];
+  // Church specific data from config
+  const configServices = config?.church?.services || [];
   const zones = config?.church?.zones || [];
 
   useEffect(() => {
     const loadData = async () => {
+      setLoading(true);
+      setError(null);
+      
       try {
+        // Fetch dashboard data from backend
+        const dashboard = await getMemberDashboard();
+        setDashboardData(dashboard);
+        
+        // Fetch broadcasts
         try {
           const broadcasts = await getBroadcasts();
           setRecentBroadcasts((broadcasts || []).slice(0, 3));
@@ -58,14 +77,15 @@ const Home = () => {
         } catch (e) {
           console.warn('Could not load broadcasts:', e);
         }
-        setTimeout(() => {
-          setLoading(false);
-        }, 300);
+        
       } catch (err) {
-        console.error('Error loading home data:', err);
+        console.error('Error loading dashboard data:', err);
+        setError('Could not load dashboard data. Please try again.');
+      } finally {
         setLoading(false);
       }
     };
+    
     loadData();
   }, []);
 
@@ -79,19 +99,22 @@ const Home = () => {
     return date.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' });
   };
 
-  function openSokoni() {
-    setSokoniOpen(true);
+  // Refresh dashboard data
+  const refreshDashboard = async () => {
+    setLoading(true);
     try {
-      getActiveShops().then(shopsData => {
-        setShops(shopsData);
-      }).catch(error => {
-        console.error('Error fetching shops:', error);
-        setShops([]);
-      });
-    } catch (error) {
-      setShops([]);
+      const dashboard = await getMemberDashboard();
+      setDashboardData(dashboard);
+      const broadcasts = await getBroadcasts();
+      setRecentBroadcasts((broadcasts || []).slice(0, 3));
+      const unread = await getUnreadBroadcastsCount();
+      setUnreadCount(unread);
+    } catch (err) {
+      console.error('Error refreshing dashboard:', err);
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
   if (loading) {
     return (
@@ -111,6 +134,7 @@ const Home = () => {
           borderRadius: '50%',
           animation: 'spin 1s linear infinite'
         }} />
+        <p style={{ marginTop: '12px', color: '#6B7280', fontSize: '0.9rem' }}>Loading your dashboard...</p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -125,7 +149,14 @@ const Home = () => {
     { id: 'meetings', label: 'Meetings', icon: '📅', color: '#F59E0B', route: '/meetings' },
     { id: 'gallery', label: 'Photo Gallery', icon: '📸', color: '#06B6D4', route: '/gallery' },
     { id: 'opinions', label: 'Share Opinion', icon: '💬', color: '#8B5CF6', route: '/opinions' },
-    { id: 'sokoni', label: 'Sokoni', icon: '🛒', color: '#10B981', isModal: true },
+    { id: 'profile', label: 'My Profile', icon: '👤', color: '#10B981', route: '/profile' },
+  ];
+
+  // Use config services or fallback
+  const services = configServices.length > 0 ? configServices : [
+    { id: 'youth', name: 'Youth Service', time: '8:00 - 9:30 AM' },
+    { id: 'english', name: 'English Service', time: '10:00 AM - 12:00 PM' },
+    { id: 'swahili', name: 'Swahili Service', time: '12:30 - 2:00 PM' },
   ];
 
   return (
@@ -140,12 +171,31 @@ const Home = () => {
         color: 'white',
         position: 'relative'
       }}>
+        {/* Refresh Button */}
+        <button 
+          onClick={refreshDashboard}
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            background: 'rgba(255,255,255,0.2)',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '8px',
+            cursor: 'pointer',
+            color: 'white'
+          }}
+        >
+          🔄
+        </button>
+
         {/* Logo and Welcome */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
           <img 
             src="/logos/stbarnabas-logo.png" 
             alt="St. Barnabas" 
             style={{ width: '50px', height: '50px', borderRadius: '12px', background: 'white', padding: '4px' }}
+            onError={(e) => { e.target.style.display = 'none'; }}
           />
           <div>
             <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>
@@ -180,15 +230,16 @@ const Home = () => {
           <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
             {services.map((service, idx) => (
               <div 
-                key={idx} 
-                onClick={() => navigate(`/service-order/${service.id}`)}
+                key={service.id || idx} 
+                onClick={() => navigate(`/service-order?service=${service.id || idx}`)}
                 style={{
                   background: 'rgba(255,255,255,0.2)',
                   borderRadius: '8px',
                   padding: '8px 12px',
                   minWidth: '120px',
                   textAlign: 'center',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  transition: 'background 0.2s'
                 }}
               >
                 <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 600 }}>{service.name}</p>
@@ -201,7 +252,37 @@ const Home = () => {
 
       {/* Main Content */}
       <div style={{ padding: '16px', marginTop: '-20px' }}>
-        {/* Quick Stats Cards */}
+        {/* Error Message */}
+        {error && (
+          <div style={{
+            background: '#FEE2E2',
+            border: '1px solid #FECACA',
+            borderRadius: '12px',
+            padding: '12px',
+            marginBottom: '16px',
+            color: '#DC2626',
+            fontSize: '0.85rem'
+          }}>
+            {error}
+            <button 
+              onClick={refreshDashboard}
+              style={{
+                marginLeft: '10px',
+                background: '#DC2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '4px 10px',
+                cursor: 'pointer',
+                fontSize: '0.8rem'
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Quick Stats Cards - Now using real data */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
@@ -219,7 +300,7 @@ const Home = () => {
             <div style={{ fontSize: '1.25rem', marginBottom: '4px' }}>💰</div>
             <p style={{ margin: 0, fontSize: '0.65rem', color: '#6B7280' }}>My Giving</p>
             <p style={{ margin: '2px 0 0', fontSize: '0.85rem', fontWeight: 700, color: '#059669' }}>
-              {formatCurrency(stats.balance)}
+              {formatCurrency(dashboardData.stats.totalContributions)}
             </p>
           </div>
 
@@ -234,7 +315,7 @@ const Home = () => {
             <div style={{ fontSize: '1.25rem', marginBottom: '4px' }}>📅</div>
             <p style={{ margin: 0, fontSize: '0.65rem', color: '#6B7280' }}>Meetings</p>
             <p style={{ margin: '2px 0 0', fontSize: '0.85rem', fontWeight: 700, color: '#1F2937' }}>
-              {stats.events} upcoming
+              {dashboardData.stats.upcomingMeetings} upcoming
             </p>
           </div>
 
@@ -250,9 +331,9 @@ const Home = () => {
             <div style={{ fontSize: '1.25rem', marginBottom: '4px' }}>📢</div>
             <p style={{ margin: 0, fontSize: '0.65rem', color: '#6B7280' }}>Broadcasts</p>
             <p style={{ margin: '2px 0 0', fontSize: '0.85rem', fontWeight: 700, color: '#1F2937' }}>
-              {stats.notices} new
+              {dashboardData.stats.unreadBroadcasts || unreadCount} new
             </p>
-            {unreadCount > 0 && (
+            {(dashboardData.stats.unreadBroadcasts > 0 || unreadCount > 0) && (
               <span style={{
                 position: 'absolute',
                 top: '8px',
@@ -266,7 +347,7 @@ const Home = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
-              }}>{unreadCount}</span>
+              }}>{dashboardData.stats.unreadBroadcasts || unreadCount}</span>
             )}
           </div>
         </div>
@@ -284,7 +365,7 @@ const Home = () => {
             {quickActions.map((action) => (
               <button
                 key={action.id}
-                onClick={() => action.isModal ? openSokoni() : navigate(action.route)}
+                onClick={() => navigate(action.route)}
                 style={{
                   background: 'white',
                   borderRadius: '14px',
@@ -334,6 +415,33 @@ const Home = () => {
           </div>
         </div>
 
+        {/* Prayer Requests Summary */}
+        {dashboardData.stats.pendingPrayers > 0 && (
+          <div 
+            onClick={() => navigate('/prayer-request')}
+            style={{
+              background: 'linear-gradient(135deg, #EC4899 0%, #DB2777 100%)',
+              borderRadius: '16px',
+              padding: '16px',
+              color: 'white',
+              marginBottom: '20px',
+              cursor: 'pointer'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>
+                  🙏 Prayer Requests
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', opacity: 0.9 }}>
+                  {dashboardData.stats.pendingPrayers} pending prayer requests
+                </p>
+              </div>
+              <span style={{ fontSize: '1.5rem' }}>→</span>
+            </div>
+          </div>
+        )}
+
         {/* Member Info Card */}
         {user && (
           <div style={{
@@ -350,28 +458,64 @@ const Home = () => {
               <div>
                 <p style={{ margin: 0, fontSize: '0.7rem', opacity: 0.8 }}>Zone</p>
                 <p style={{ margin: '2px 0 0', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {user.zone_name || 'Mt. Olive'}
+                  {user.zone_name || dashboardData.quickInfo?.zone || 'Not assigned'}
                 </p>
               </div>
               <div>
                 <p style={{ margin: 0, fontSize: '0.7rem', opacity: 0.8 }}>Ministry</p>
                 <p style={{ margin: '2px 0 0', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {user.ministry_name || 'Youth'}
+                  {user.ministry_name || dashboardData.quickInfo?.ministry || 'Not assigned'}
                 </p>
               </div>
               <div>
-                <p style={{ margin: 0, fontSize: '0.7rem', opacity: 0.8 }}>Service</p>
+                <p style={{ margin: 0, fontSize: '0.7rem', opacity: 0.8 }}>Phone</p>
                 <p style={{ margin: '2px 0 0', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {user.preferred_service || 'English'}
+                  {user.phone || 'Not set'}
                 </p>
               </div>
               <div>
-                <p style={{ margin: 0, fontSize: '0.7rem', opacity: 0.8 }}>Member Since</p>
+                <p style={{ margin: 0, fontSize: '0.7rem', opacity: 0.8 }}>Member ID</p>
                 <p style={{ margin: '2px 0 0', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {user.member_since || '2020'}
+                  {user.member_id || user.id || 'N/A'}
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Recent Activity */}
+        {dashboardData.recentActivity && dashboardData.recentActivity.length > 0 && (
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '16px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+            marginBottom: '20px'
+          }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '0.9rem', fontWeight: 600, color: '#1F2937' }}>
+              📋 Recent Activity
+            </h3>
+            {dashboardData.recentActivity.slice(0, 5).map((activity, idx) => (
+              <div key={idx} style={{
+                padding: '10px',
+                background: '#F9FAFB',
+                borderRadius: '10px',
+                marginBottom: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <span style={{ fontSize: '1.2rem' }}>{activity.icon || '📌'}</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 500, color: '#1F2937' }}>
+                    {activity.title}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#6B7280' }}>
+                    {activity.description || formatDate(activity.date)}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -418,15 +562,63 @@ const Home = () => {
           </div>
         )}
 
+        {/* Upcoming Events */}
+        {dashboardData.upcomingEvents && dashboardData.upcomingEvents.length > 0 && (
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '16px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+            marginBottom: '20px'
+          }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '0.9rem', fontWeight: 600, color: '#1F2937' }}>
+              📆 Upcoming Events
+            </h3>
+            {dashboardData.upcomingEvents.slice(0, 3).map((event, idx) => (
+              <div key={idx} onClick={() => navigate('/meetings')} style={{
+                padding: '10px',
+                background: '#F9FAFB',
+                borderRadius: '10px',
+                marginBottom: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <div style={{
+                  background: primaryColor,
+                  color: 'white',
+                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  textAlign: 'center',
+                  minWidth: '50px'
+                }}>
+                  <p style={{ margin: 0, fontSize: '0.65rem', fontWeight: 500 }}>
+                    {new Date(event.date).toLocaleDateString('en-KE', { month: 'short' })}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>
+                    {new Date(event.date).getDate()}
+                  </p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#1F2937' }}>
+                    {event.title}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#6B7280' }}>
+                    {event.time || event.location}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Footer */}
         <div style={{ textAlign: 'center', padding: '20px 0 80px', color: '#9CA3AF', fontSize: '0.7rem' }}>
           <p style={{ margin: 0 }}>© 2024 {shortName} - Otiende, Langata</p>
           <p style={{ margin: '4px 0 0' }}>{tagline}</p>
         </div>
       </div>
-
-      {/* Sokoni Modal */}
-      <SokoniModal isOpen={sokoniOpen} onClose={() => setSokoniOpen(false)} shops={shops} />
     </div>
   );
 };

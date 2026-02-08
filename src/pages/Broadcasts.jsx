@@ -17,54 +17,19 @@ const Broadcasts = () => {
 
   const loadBroadcasts = async () => {
     try {
-      setTimeout(() => {
-        setBroadcasts([
-          {
-            id: 1,
-            title: 'January 2025 Monthly Contribution Due',
-            content: 'Dear members, your monthly contribution of KES 500 is due. Please make payment by January 15th. Thank you for your continued support.',
-            category: 'Finance',
-            priority: 'Important',
-            created_at: '2025-01-10T10:00:00Z',
-            read_status: false
-          },
-          {
-            id: 2,
-            title: 'Welfare Support Request - Medical Emergency',
-            content: 'Our member John is requesting support for medical expenses. Any contributions are welcome.',
-            category: 'Welfare',
-            priority: 'Urgent',
-            created_at: '2025-01-09T14:30:00Z',
-            read_status: false
-          },
-          {
-            id: 3,
-            title: ' AGM Scheduled for February 2025',
-            content: 'The Annual General Meeting will be held on February 15th, 2025 at 10:00 AM. All members are encouraged to attend.',
-            category: 'Meeting',
-            priority: 'Normal',
-            created_at: '2025-01-08T09:00:00Z',
-            read_status: true
-          },
-          {
-            id: 4,
-            title: 'New Meeting Notes Available',
-            content: 'December 2024 meeting minutes are now available in the Meeting Notes section.',
-            category: 'General',
-            priority: 'Normal',
-            created_at: '2025-01-05T11:00:00Z',
-            read_status: true
-          }
-        ]);
-        setLoading(false);
-      }, 500);
+      setLoading(true);
+      const data = await getBroadcasts();
+      setBroadcasts(data || []);
     } catch (error) {
       console.error('Error loading broadcasts:', error);
+      setBroadcasts([]);
+    } finally {
       setLoading(false);
     }
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-KE', {
       day: 'numeric',
@@ -87,14 +52,35 @@ const Broadcasts = () => {
       'Welfare': '#E31C23',
       'Meeting': '#3B82F6',
       'General': '#8B5CF6',
-      'Event': '#EC4899'
+      'Event': '#EC4899',
+      'Announcement': '#6366F1',
+      'Prayer': '#14B8A6'
     };
     return colors[category] || '#6B7280';
+  };
+
+  const handleBroadcastClick = async (broadcast) => {
+    // Mark as read if not already
+    if (!broadcast.read_status) {
+      try {
+        await markBroadcastRead(broadcast.id);
+        // Update local state
+        setBroadcasts(prev => prev.map(b => 
+          b.id === broadcast.id ? { ...b, read_status: true } : b
+        ));
+      } catch (error) {
+        console.error('Error marking broadcast as read:', error);
+      }
+    }
+    navigate('/broadcast-detail', { state: { broadcast } });
   };
 
   const filteredBroadcasts = filter === 'all' 
     ? broadcasts 
     : broadcasts.filter(b => b.category === filter);
+
+  // Get unique categories from broadcasts
+  const categories = ['all', ...new Set(broadcasts.map(b => b.category).filter(Boolean))];
 
   if (loading) {
     return (
@@ -116,6 +102,7 @@ const Broadcasts = () => {
           marginBottom: '12px'
         }} />
         <p>Loading updates...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
@@ -160,7 +147,7 @@ const Broadcasts = () => {
         marginBottom: '16px',
         scrollbarWidth: 'none'
       }}>
-        {['all', 'Finance', 'Welfare', 'Meeting', 'General'].map((cat) => (
+        {categories.map((cat) => (
           <button
             key={cat}
             onClick={() => setFilter(cat)}
@@ -197,14 +184,17 @@ const Broadcasts = () => {
           border: '1px solid #e5e7eb'
         }}>
           <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📢</div>
-          <p>No updates yet</p>
+          <p style={{ margin: 0 }}>No updates yet</p>
+          <p style={{ margin: '8px 0 0', fontSize: '0.875rem' }}>
+            Check back later for announcements
+          </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filteredBroadcasts.map((broadcast) => (
             <div
               key={broadcast.id}
-              onClick={() => navigate('/broadcast-detail', { state: { broadcast } })}
+              onClick={() => handleBroadcastClick(broadcast)}
               style={{
                 background: 'white',
                 borderRadius: '16px',
@@ -230,7 +220,7 @@ const Broadcasts = () => {
                     background: `${getCategoryColor(broadcast.category)}15`,
                     color: getCategoryColor(broadcast.category)
                   }}>
-                    {broadcast.category}
+                    {broadcast.category || 'General'}
                   </span>
                   {!broadcast.read_status && (
                     <span style={{
@@ -246,7 +236,7 @@ const Broadcasts = () => {
                   color: getPriorityColor(broadcast.priority),
                   fontWeight: 600
                 }}>
-                  {broadcast.priority}
+                  {broadcast.priority || 'Normal'}
                 </span>
               </div>
 

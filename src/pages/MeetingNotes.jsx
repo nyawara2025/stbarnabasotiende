@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Plus, Edit, Trash2, X, CheckCircle, 
-  Clock, FileText, Calendar, MapPin
-} from 'lucide-react';
 import { getStoredUser } from '../utils/apiClient';
 import meetingService from '../services/meetingService';
 
@@ -275,8 +271,7 @@ const MeetingNotes = () => {
                 fontSize: '0.875rem'
               }}
             >
-              <Plus className="w-4 h-4" />
-              New Meeting
+              + New Meeting
             </button>
           )}
         </div>
@@ -455,8 +450,7 @@ const MeetingNotes = () => {
                       color: '#1e40af'
                     }}
                   >
-                    <Edit className="w-3 h-3" />
-                    Edit
+                    ✏️ Edit
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(note); }}
@@ -473,8 +467,7 @@ const MeetingNotes = () => {
                       color: '#991b1b'
                     }}
                   >
-                    <Trash2 className="w-3 h-3" />
-                    Delete
+                    🗑️ Delete
                   </button>
                 </div>
               )}
@@ -523,10 +516,11 @@ const MeetingNotes = () => {
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  padding: '4px'
+                  padding: '4px',
+                  fontSize: '1.2rem'
                 }}
               >
-                <X className="w-5 h-5 text-gray-400" />
+                ✕
               </button>
             </div>
 

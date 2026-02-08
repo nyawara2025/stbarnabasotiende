@@ -1,5 +1,4 @@
 import React, { useState, useContext } from 'react';
-import { MessageCircle } from 'lucide-react';
 import { ConfigContext } from '../App';
 
 /**
@@ -86,8 +85,7 @@ const ShopWhatsAppButton = ({
       }}
       title={!customerPhone ? 'No customer phone number' : 'Send response via WhatsApp'}
     >
-      <MessageCircle size={20} />
-      {sending ? 'Opening WhatsApp...' : 'Send via WhatsApp 💬'}
+      💬 {sending ? 'Opening WhatsApp...' : 'Send via WhatsApp'}
     </button>
   );
 };

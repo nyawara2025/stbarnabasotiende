@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Calendar, Users, DollarSign, FileText, Plus, 
-  ChevronLeft, ChevronRight, Search, Filter,
-  CheckCircle, Clock, XCircle, Edit, Trash2, Eye
-} from 'lucide-react';
 import meetingService from '../services/meetingService';
 
 const MeetingMinutes = () => {
@@ -251,8 +246,7 @@ const MeetingMinutes = () => {
                 fontSize: '0.875rem'
               }}
             >
-              <Plus className="w-4 h-4" />
-              New Meeting
+              + New Meeting
             </button>
           )}
         </div>
@@ -317,7 +311,7 @@ const MeetingMinutes = () => {
         flexWrap: 'wrap'
       }}>
         <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '16px', height: '16px', color: '#9ca3af' }} />
+          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.875rem', color: '#9ca3af' }}>🔍</span>
           <input
             type="text"
             placeholder="Search meetings..."
@@ -382,7 +376,7 @@ const MeetingMinutes = () => {
           color: '#6B7280',
           textAlign: 'center'
         }}>
-          <Calendar style={{ width: '48px', height: '48px', marginBottom: '16px', color: '#d1d5db' }} />
+          <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📅</div>
           <p>No meetings found</p>
           {isAdmin && (
             <button
@@ -452,14 +446,14 @@ const MeetingMinutes = () => {
                   <div style={{ display: 'flex', gap: '16px', marginLeft: '20px' }}>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#6B7280', fontSize: '0.75rem' }}>
-                        <Users className="w-4 h-4" />
+                        <span>👥</span>
                         <span>{meeting.attendees_count || 0}</span>
                       </div>
                       <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Attendees</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: config.primaryColor, fontSize: '0.75rem' }}>
-                        <DollarSign className="w-4 h-4" />
+                        <span>💵</span>
                         <span>{formatCurrency(meeting.total_contributions || 0)}</span>
                       </div>
                       <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Collected</div>
@@ -486,11 +480,7 @@ const MeetingMinutes = () => {
                             fontSize: '0.7rem'
                           }}
                         >
-                          {item.status === 'COMPLETED' ? (
-                            <CheckCircle className="w-3 h-3" />
-                          ) : (
-                            <Clock className="w-3 h-3" />
-                          )}
+                          {item.status === 'COMPLETED' ? '✓' : '⏱'}
                           {item.task}
                         </span>
                       ))}
@@ -527,8 +517,7 @@ const MeetingMinutes = () => {
                         fontSize: '0.75rem'
                       }}
                     >
-                      <Eye className="w-3 h-3" />
-                      View
+                      👁 View
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleEditMeeting(meeting); }}
@@ -545,8 +534,7 @@ const MeetingMinutes = () => {
                         color: '#1e40af'
                       }}
                     >
-                      <Edit className="w-3 h-3" />
-                      Edit
+                      ✏️ Edit
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(meeting.id); }}
@@ -563,8 +551,7 @@ const MeetingMinutes = () => {
                         color: '#991b1b'
                       }}
                     >
-                      <Trash2 className="w-3 h-3" />
-                      Delete
+                      🗑️ Delete
                     </button>
                   </div>
                 )}
@@ -614,10 +601,11 @@ const MeetingMinutes = () => {
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  padding: '4px'
+                  padding: '4px',
+                  fontSize: '1.2rem'
                 }}
               >
-                <XCircle className="w-5 h-5 text-gray-400" />
+                ✕
               </button>
             </div>
 
@@ -856,10 +844,11 @@ const MeetingMinutes = () => {
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  padding: '4px'
+                  padding: '4px',
+                  fontSize: '1.2rem'
                 }}
               >
-                <XCircle className="w-5 h-5 text-gray-400" />
+                ✕
               </button>
             </div>
 
@@ -868,17 +857,17 @@ const MeetingMinutes = () => {
               {/* Stats */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
                 <div style={{ background: '#f0fdf4', borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
-                  <Users className="w-5 h-5 mx-auto mb-2" style={{ color: '#16a34a', margin: '0 auto 8px' }} />
+                  <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>👥</div>
                   <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#16a34a' }}>{selectedMeeting.attendees_count || 0}</div>
                   <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Attendees</div>
                 </div>
                 <div style={{ background: '#eff6ff', borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
-                  <DollarSign className="w-5 h-5 mx-auto mb-2" style={{ color: '#2563eb', margin: '0 auto 8px' }} />
+                  <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>💵</div>
                   <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#2563eb' }}>{formatCurrency(selectedMeeting.total_contributions || 0)}</div>
                   <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Collected</div>
                 </div>
                 <div style={{ background: '#fef3c7', borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
-                  <Clock className="w-5 h-5 mx-auto mb-2" style={{ color: '#d97706', margin: '0 auto 8px' }} />
+                  <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>⏱</div>
                   <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#d97706' }}>{selectedMeeting.action_items?.length || 0}</div>
                   <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Action Items</div>
                 </div>
@@ -922,11 +911,9 @@ const MeetingMinutes = () => {
                           borderLeft: `4px solid ${item.status === 'COMPLETED' ? '#16a34a' : '#d97706'}`
                         }}
                       >
-                        {item.status === 'COMPLETED' ? (
-                          <CheckCircle className="w-5 h-5" style={{ color: '#16a34a', flexShrink: 0 }} />
-                        ) : (
-                          <Clock className="w-5 h-5" style={{ color: '#d97706', flexShrink: 0 }} />
-                        )}
+                        <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>
+                          {item.status === 'COMPLETED' ? '✓' : '⏱'}
+                        </span>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{item.task}</div>
                           <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>

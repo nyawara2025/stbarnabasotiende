@@ -1,5 +1,4 @@
 import React from 'react';
-import { MessageCircle } from 'lucide-react';
 
 const WhatsAppReplyButton = ({ phone, message, userName, disabled }) => {
   const formatPhone = (phone) => {
@@ -17,7 +16,7 @@ const WhatsAppReplyButton = ({ phone, message, userName, disabled }) => {
 
     const formattedPhone = formatPhone(phone);
     const encodedMessage = encodeURIComponent(
-      `Hi ${userName || 'there'},\n\nRegarding your inquiry:\n"${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"\n\nOur response:\n\n[CARE KENYA SUPPORT]`
+      `Hi ${userName || 'there'},\n\nRegarding your inquiry:\n"${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"\n\nOur response:\n\n[ST. BARNABAS CHURCH]`
     );
 
     const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
@@ -48,8 +47,7 @@ const WhatsAppReplyButton = ({ phone, message, userName, disabled }) => {
       }}
       title={!phone ? 'No phone number available' : 'Send reply via WhatsApp'}
     >
-      <MessageCircle size={18} />
-      Send via WhatsApp
+      💬 Send via WhatsApp
     </button>
   );
 };

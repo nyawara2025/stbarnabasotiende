@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { DollarSign, Plus, Trash2, CheckCircle, XCircle } from 'lucide-react';
 
 const MeetingContributions = ({ 
   meetingId, 
@@ -164,17 +163,7 @@ const MeetingContributions = ({
               fontWeight: 500
             }}
           >
-            {showForm ? (
-              <>
-                <XCircle className="w-4 h-4" />
-                Cancel
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                Add Contribution
-              </>
-            )}
+            {showForm ? '✕ Cancel' : '+ Add Contribution'}
           </button>
         )}
       </div>
@@ -411,12 +400,7 @@ const MeetingContributions = ({
                   opacity: isSubmitting ? 0.6 : 1
                 }}
               >
-                {isSubmitting ? 'Saving...' : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Save Contribution
-                  </>
-                )}
+                {isSubmitting ? 'Saving...' : '✓ Save Contribution'}
               </button>
             </div>
           </form>
@@ -432,7 +416,7 @@ const MeetingContributions = ({
           textAlign: 'center',
           color: '#6b7280'
         }}>
-          <DollarSign className="w-8 h-8 mx-auto mb-4" style={{ color: '#d1d5db' }} />
+          <div style={{ fontSize: '2rem', marginBottom: '12px' }}>💵</div>
           <p style={{ margin: 0 }}>No contributions recorded yet</p>
           {isAdmin && (
             <p style={{ margin: '8px 0 0', fontSize: '0.75rem' }}>
@@ -502,10 +486,12 @@ const MeetingContributions = ({
                       background: 'none',
                       border: 'none',
                       cursor: 'pointer',
-                      color: '#9ca3af'
+                      color: '#9ca3af',
+                      fontSize: '1rem'
                     }}
+                    title="Delete contribution"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    🗑️
                   </button>
                 )}
               </div>

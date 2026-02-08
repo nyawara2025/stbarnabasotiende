@@ -19,7 +19,7 @@ const Chat = () => {
 
   // Get config values with fallbacks
   const whatsappNumber = config?.modules?.support?.whatsappNumber || '+254700000000';
-  const orgName = config?.identity?.name || 'Care Kenya Welfare';
+  const orgName = config?.identity?.name || 'St. Barnabas Church';
   const orgId = user?.org_id || user?.orgId || 1;
 
   // Load chat history from server (includes WhatsApp messages)
@@ -50,7 +50,7 @@ const Chat = () => {
         setMessages([
           {
             id: 1,
-            text: `Welcome to ${orgName} Support! 🤝\n\nHow can we help you today? You can:\n\n• Ask questions about contributions or welfare support\n• Use the WhatsApp button below to chat directly with our team\n• Leave a message and we'll respond shortly`,
+            text: `Welcome to ${orgName} Support! ⛪\n\nHow can we help you today? You can:\n\n• Ask questions about church activities or contributions\n• Use the WhatsApp button below to chat directly with our team\n• Leave a message and we'll respond shortly`,
             sender: 'admin',
             timestamp: new Date().toISOString()
           }
@@ -116,7 +116,7 @@ const Chat = () => {
       });
 
       // Get reply text
-      let replyText = 'Thank you for your message. Our team will respond shortly.';
+      let replyText = 'Thank you for your message. Our church team will respond shortly.';
       
       if (response && response.reply) {
         replyText = response.reply;
@@ -181,9 +181,11 @@ const Chat = () => {
 
   const openWhatsApp = () => {
     const cleanNumber = whatsappNumber.replace(/[^0-9]/g, '');
-    const message = encodeURIComponent(`Hello ${orgName}, I need assistance with my welfare account.`);
+    const message = encodeURIComponent(`Hello ${orgName}, I need assistance.`);
     window.open(`https://wa.me/${cleanNumber}?text=${message}`, '_blank');
   };
+
+  const primaryColor = config?.theme?.colors?.primary || '#7C3AED';
 
   return (
     <div style={styles.container}>
@@ -245,7 +247,7 @@ const Chat = () => {
               >
                 <div style={{
                   ...styles.messageBubble,
-                  background: isUser ? '#E31C23' : '#f3f4f6',
+                  background: isUser ? primaryColor : '#f3f4f6',
                   color: isUser ? 'white' : '#1f2937',
                   borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px'
                 }}>
@@ -281,7 +283,7 @@ const Chat = () => {
 
       {/* Quick Actions */}
       <div style={styles.quickActions}>
-        {['How do I pay?', 'My balance?', 'Welfare support', 'Meeting notes'].map((q) => (
+        {['Service times?', 'My contributions?', 'Prayer request', 'Church events'].map((q) => (
           <button
             key={q}
             style={styles.quickButton}
@@ -308,6 +310,7 @@ const Chat = () => {
         <button
           style={{
             ...styles.sendButton,
+            background: primaryColor,
             opacity: inputText.trim() && !loading ? 1 : 0.5,
             cursor: inputText.trim() && !loading ? 'pointer' : 'not-allowed'
           }}
@@ -504,7 +507,6 @@ const styles = {
     width: '44px',
     height: '44px',
     borderRadius: '50%',
-    background: '#E31C23',
     border: 'none',
     color: 'white',
     fontSize: '1.125rem',

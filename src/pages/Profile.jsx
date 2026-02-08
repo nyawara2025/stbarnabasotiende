@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getStoredUser, clearAuthData, updateProfile } from '../utils/apiClient';
+import { getStoredUser, clearAuthData, updateProfile, STORAGE_KEYS } from '../utils/apiClient';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -8,6 +8,7 @@ const Profile = () => {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
 
   useEffect(() => {
     const userData = getStoredUser();
@@ -26,13 +27,18 @@ const Profile = () => {
 
   const handleSave = async () => {
     setLoading(true);
+    setSaveMessage('');
     try {
       await updateProfile(formData);
       setUser(formData);
-      localStorage.setItem('carekenya_welfare_current_user', JSON.stringify(formData));
+      // Use the correct storage key from apiClient
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(formData));
       setEditing(false);
+      setSaveMessage('Profile updated successfully!');
+      setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
       console.error('Error updating profile:', error);
+      setSaveMessage('Failed to update profile. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -57,12 +63,13 @@ const Profile = () => {
           width: '32px',
           height: '32px',
           border: '3px solid #e5e7eb',
-          borderTopColor: '#E31C23',
+          borderTopColor: '#7C3AED',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
           marginBottom: '12px'
         }} />
         <p>Loading profile...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
@@ -81,7 +88,7 @@ const Profile = () => {
           style={{
             background: 'none',
             border: 'none',
-            color: '#E31C23',
+            color: '#7C3AED',
             cursor: 'pointer',
             fontSize: '0.875rem',
             padding: 0,
@@ -103,9 +110,24 @@ const Profile = () => {
         <div style={{ width: '60px' }} />
       </div>
 
+      {/* Save Message */}
+      {saveMessage && (
+        <div style={{
+          padding: '12px',
+          marginBottom: '16px',
+          borderRadius: '8px',
+          background: saveMessage.includes('success') ? '#D1FAE5' : '#FEE2E2',
+          color: saveMessage.includes('success') ? '#065F46' : '#991B1B',
+          fontSize: '0.875rem',
+          textAlign: 'center'
+        }}>
+          {saveMessage}
+        </div>
+      )}
+
       {/* Profile Card */}
       <div style={{
-        background: 'linear-gradient(135deg, #E31C23 0%, #991b1b 100%)',
+        background: 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)',
         borderRadius: '20px',
         padding: '32px',
         color: 'white',
@@ -123,16 +145,21 @@ const Profile = () => {
           margin: '0 auto 16px',
           fontSize: '2rem',
           fontWeight: 700,
-          color: '#E31C23'
+          color: '#7C3AED'
         }}>
           {user?.first_name?.charAt(0) || 'M'}
         </div>
         <h2 style={{ margin: '0 0 4px', fontSize: '1.5rem' }}>
-          {user?.full_name || user?.first_name || 'Member'}
+          {user?.full_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Member'}
         </h2>
         <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
-          {user?.role || 'Member'} • Care Kenya Welfare
+          {user?.role || 'Member'} • St. Barnabas Church
         </p>
+        {user?.zone_name && (
+          <p style={{ margin: '4px 0 0', opacity: 0.8, fontSize: '0.8rem' }}>
+            {user.zone_name} Zone {user?.ministry_name && `• ${user.ministry_name}`}
+          </p>
+        )}
       </div>
 
       {/* Profile Info */}
@@ -154,27 +181,30 @@ const Profile = () => {
           </h3>
           <button
             onClick={() => editing ? handleSave() : setEditing(true)}
+            disabled={loading}
             style={{
               padding: '8px 16px',
-              background: editing ? '#10B981' : '#f3f4f6',
+              background: loading ? '#9CA3AF' : editing ? '#10B981' : '#f3f4f6',
               color: editing ? 'white' : '#374151',
               border: 'none',
               borderRadius: '8px',
               fontSize: '0.875rem',
-              cursor: 'pointer'
+              cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            {editing ? 'Save' : 'Edit'}
+            {loading ? 'Saving...' : editing ? 'Save' : 'Edit'}
           </button>
         </div>
 
         {/* Info Fields */}
         {[
-          { label: 'Full Name', key: 'full_name', icon: '👤' },
-          { label: 'Phone', key: 'phone', icon: '📱' },
-          { label: 'Email', key: 'email', icon: '📧' },
-          { label: 'Member ID', key: 'member_id', icon: '🪪' },
-          { label: 'Role', key: 'role', icon: '⭐' },
+          { label: 'Full Name', key: 'full_name', icon: '👤', editable: true },
+          { label: 'Phone', key: 'phone', icon: '📱', editable: true },
+          { label: 'Email', key: 'email', icon: '📧', editable: true },
+          { label: 'Member ID', key: 'member_id', icon: '🪪', editable: false },
+          { label: 'Zone', key: 'zone_name', icon: '📍', editable: false },
+          { label: 'Ministry', key: 'ministry_name', icon: '⛪', editable: false },
+          { label: 'Role', key: 'role', icon: '⭐', editable: false },
         ].map((field) => (
           <div key={field.key} style={{
             display: 'flex',
@@ -189,7 +219,7 @@ const Profile = () => {
                 {field.label}
               </span>
             </div>
-            {editing && field.key !== 'role' ? (
+            {editing && field.editable ? (
               <input
                 type="text"
                 name={field.key}
@@ -225,10 +255,12 @@ const Profile = () => {
           Quick Links
         </h3>
         {[
-          { label: '📋 Meeting Notes', route: '/meeting-notes' },
+          { label: '🎵 Sermons', route: '/sermons' },
+          { label: '📅 Meetings', route: '/meetings' },
+          { label: '🙏 Prayer Requests', route: '/prayer-requests' },
+          { label: '📸 Gallery', route: '/gallery' },
           { label: '📢 Updates', route: '/broadcasts' },
-          { label: '📋 Notices', route: '/notices' },
-          { label: '💬 My Inquiries', route: '/my-inquiries' },
+          { label: '💰 My Contributions', route: '/finance' },
         ].map((link) => (
           <div
             key={link.route}
@@ -249,25 +281,55 @@ const Profile = () => {
           </div>
         ))}
         
-        {/* Admin Link - Chat Dashboard */}
-        {(user?.role === 'shop_admin' || user?.role === 'admin' || user?.role === 'treasurer' || user?.role === 'secretary') && (
-          <div
-            onClick={() => navigate('/chat-admin')}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '12px 0',
-              cursor: 'pointer',
-              color: '#E31C23',
-              fontWeight: 500
-            }}
-          >
-            <span style={{ fontSize: '0.9rem' }}>
-              💬 Chat Dashboard (Admin)
-            </span>
-            <span style={{ color: '#E31C23' }}>→</span>
-          </div>
+        {/* Admin/Treasurer Links */}
+        {(user?.role === 'admin' || user?.role === 'treasurer' || user?.role === 'secretary' || user?.is_treasurer) && (
+          <>
+            <div style={{ 
+              marginTop: '16px', 
+              paddingTop: '16px', 
+              borderTop: '2px solid #e5e7eb',
+              marginBottom: '8px'
+            }}>
+              <span style={{ fontSize: '0.75rem', color: '#6B7280', fontWeight: 600 }}>
+                ADMIN FUNCTIONS
+              </span>
+            </div>
+            <div
+              onClick={() => navigate('/chat-admin')}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 0',
+                cursor: 'pointer',
+                color: '#7C3AED',
+                fontWeight: 500,
+                borderBottom: '1px solid #f3f4f6'
+              }}
+            >
+              <span style={{ fontSize: '0.9rem' }}>
+                💬 Chat Dashboard
+              </span>
+              <span style={{ color: '#7C3AED' }}>→</span>
+            </div>
+            <div
+              onClick={() => navigate('/broadcast-admin')}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 0',
+                cursor: 'pointer',
+                color: '#7C3AED',
+                fontWeight: 500
+              }}
+            >
+              <span style={{ fontSize: '0.9rem' }}>
+                📢 Send Broadcast
+              </span>
+              <span style={{ color: '#7C3AED' }}>→</span>
+            </div>
+          </>
         )}
       </div>
 
