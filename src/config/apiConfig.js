@@ -4,7 +4,7 @@
 
 export const API_ENDPOINTS = {
   // Authentication
-  memberLogin: 'https://n8n.tenear.com/webhook/welfare/login',
+  memberLogin: 'https://n8n.tenear.com/webhook/stbarnabas/login',
   
   // Dashboard
   getDashboard: 'https://n8n.tenear.com/webhook/church/dashboard',

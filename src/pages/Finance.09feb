@@ -52,63 +52,83 @@ const Finance = () => {
   const config = getConfig();
   const isAdmin = user?.role === 'treasurer' || user?.role === 'admin' || user?.role === 'super_admin';
 
-    // Load financial data
+  // Load financial data
   useEffect(() => {
     let isMounted = true;
 
-
     const loadData = async () => {
-  try {
-    const data = await getPaymentHistory();
-    if (!isMounted || !data) return;
-   
-    const memberSummary = Array.isArray(data) ? data[0] : data; // Ensure you get the object if it's in an array
+      try {
+        // Fetch payment history from API
+        const history = await getPaymentHistory();
+        
+        if (!isMounted) return;
+        
+        // Process transactions and calculate totals
+        const processedTransactions = (history || []).map((tx, index) => ({
+          ...tx,
+          id: tx.id || index + 1,
+          type: tx.type || (tx.amount > 0 ? 'in' : 'out'),
+          date: tx.payment_date || tx.created_at || tx.date,
+          description: tx.description || tx.category || 'Contribution',
+          reference: tx.reference || tx.mpesa_code || tx.transaction_id || 'N/A',
+          status: tx.status || 'completed'
+        })).sort((a, b) => new Date(b.date) - new Date(a.date));
 
+        setTransactions(processedTransactions);
 
-    // 1. Process the payment history array inside the n8n response
-    const processedTransactions = (memberSummary.paymentHistory || [])
-      .filter(tx => tx.amount !== null) // Filter out that null amount
-      .map((tx, index) => ({
-        ...tx,
-        id: index + 1,
-        type: 'in',
-        date: tx.date || new Date().toISOString(),
-        description: 'Monthly Contribution',
-        reference: tx.reference || 'N/A',
-        status: 'completed'
-      }));
+        // Calculate totals from real data
+        const totalPaid = processedTransactions
+          .filter(tx => tx.type === 'in' && tx.status === 'completed')
+          .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+        
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        const thisMonthPaid = processedTransactions
+          .filter(tx => {
+            const txDate = new Date(tx.date);
+            return tx.type === 'in' && txDate.getMonth() === currentMonth && 
+                   txDate.getFullYear() === currentYear && tx.status === 'completed';
+          })
+          .reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
-    setTransactions(processedTransactions);
+        setBalance({
+          current: totalPaid,
+          due: 0,
+          paid: thisMonthPaid,
+          totalPaid: totalPaid
+        });
 
-    // 2. Map n8n summary fields directly to your Balance state
-    setBalance({
-      current: memberSummary.totalPaid || 0,
-      due: memberSummary.outstandingBalance || 0,
-      paid: memberSummary.totalPaid || 0, 
-      totalPaid: memberSummary.totalPaid || 0,
-      monthlyRate: memberSummary.monthlyRate // Extra info from n8n
-    });
+        setLoading(false);
+      } catch (err) {
+        console.error('Error loading finance data:', err);
+        if (!isMounted) return;
+        setBalance({
+          current: 0,
+          due: 0,
+          paid: 0,
+          totalPaid: 0
+        });
+        setTransactions([]);
+        setLoading(false);
+      }
+    };
 
-    setLoading(false);
-  } catch (err) {
-    console.error('Error loading finance data:', err);
-    // ... error handling
-  }
-}; 
+    // Wait for config to be available
+    const checkAndLoad = () => {
+      if (window.config || cachedConfig) {
+        loadData();
+      } else {
+        // Check again in 50ms
+        setTimeout(checkAndLoad, 50);
+      }
+    };
 
-
-
-    loadData();
+    checkAndLoad();
 
     return () => {
       isMounted = false;
     };
-  }, []); // Empty dependency array runs once on mount
-      
-
-
-
-
+  }, []);
 
   // Set default phone number from user profile
   useEffect(() => {
