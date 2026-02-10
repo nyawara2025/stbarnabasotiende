@@ -146,7 +146,6 @@ const Home = () => {
     { id: 'prayer', label: 'Prayer Request', icon: '🙏', color: '#EC4899', route: '/prayer-request' },
     { id: 'finance', label: 'My Giving', icon: '💰', color: '#059669', route: '/finance' },
     { id: 'broadcasts', label: 'Broadcasts', icon: '📢', color: '#3B82F6', route: '/broadcasts', badge: unreadCount },
-    { id: 'Chat', label: 'Church Chat', icon: '💬', color: '#8B5CF6', route: '/chat' },
     { id: 'meetings', label: 'Meetings', icon: '📅', color: '#F59E0B', route: '/meetings' },
     { id: 'gallery', label: 'Photo Gallery', icon: '📸', color: '#06B6D4', route: '/gallery' },
     { id: 'opinions', label: 'Share Opinion', icon: '💬', color: '#8B5CF6', route: '/opinions' },
