@@ -140,18 +140,8 @@ const Home = () => {
     );
   }
 
-  // 1. Define who can see the admin tools
-  const isAdmin = ['admin', 'secretary', 'layreader'].includes(user?.role?.toLowerCase());
-
-  // 2. Define the single list of actions
+  // Quick Actions for Church
   const quickActions = [
-    ...(isAdmin ? [{ 
-      id: 'service-builder', 
-      label: 'Create Service', 
-      icon: '✍️', 
-      color: '#7C3AED', 
-      route: '/admin/service-builder' 
-    }] : []),
     { id: 'sermons', label: 'Sermons', icon: '🎙️', color: '#7C3AED', route: '/sermons' },
     { id: 'prayer', label: 'Prayer Request', icon: '🙏', color: '#EC4899', route: '/prayer-request' },
     { id: 'finance', label: 'My Giving', icon: '💰', color: '#059669', route: '/finance' },
@@ -160,10 +150,11 @@ const Home = () => {
     { id: 'meetings', label: 'Meetings', icon: '📅', color: '#F59E0B', route: '/meetings' },
     { id: 'gallery', label: 'Photo Gallery', icon: '📸', color: '#06B6D4', route: '/gallery' },
     { id: 'opinions', label: 'Share Opinion', icon: '💬', color: '#8B5CF6', route: '/opinions' },
+    // { id: 'sokoni', label: marketplaceLabel, icon: '🛒', color: '#10B981', route: '/sokoni', isModal: true },
     { id: 'profile', label: 'My Profile', icon: '👤', color: '#10B981', route: '/profile' },
   ];
 
-  // 3. Define the services (This was missing or out of order!)
+  // Use config services or fallback
   const services = configServices.length > 0 ? configServices : [
     { id: 'youth', name: 'Youth Service', time: '8:00 - 9:30 AM' },
     { id: 'english', name: 'English Service', time: '10:00 AM - 12:00 PM' },
