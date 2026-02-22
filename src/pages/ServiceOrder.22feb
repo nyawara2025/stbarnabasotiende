@@ -30,9 +30,13 @@ const ServiceOrder = () => {
   }, [serviceId]);
 
   const shareToWhatsApp = () => {
-    const dateStr = serviceData?.service_date ? new Date(serviceData.service_date).toDateString() : '';
-    const shareText = `*${serviceData?.title || 'Sunday Service'} - ${dateStr}*\nTheme: ${serviceData?.theme || 'N/A'}\n\nRead the Order of Service here:\n${window.location.href}`;
-    window.open(`wa.me{encodeURIComponent(shareText)}`, '_blank');
+    if (!serviceData) return;
+    const dateStr = serviceData.service_date ? new Date(serviceData.service_date).toDateString() : '';
+    const shareText = `*${serviceData.title}*\nTheme: ${serviceData.theme}\n\nView the Order of Service here:\n${window.location.href}`;
+  
+    // Standard WhatsApp URL format
+    const whatsappUrl = `https://wa.me/${encodeURIComponent(shareText)}`;
+    window.open(whatsappUrl, '_blank');
   };
 
   const renderItem = (item, index) => {

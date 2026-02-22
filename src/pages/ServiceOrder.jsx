@@ -17,11 +17,11 @@ const ServiceOrder = () => {
       try {
         setLoading(true);
         const data = await getServiceOrder(serviceId || 'latest');
-        // Handle n8n array vs object response
+        // Handle n8n response: if array, take first; otherwise use object
         const actualData = Array.isArray(data) ? data[0] : data;
         setServiceData(actualData);
       } catch (err) {
-        console.error('Error:', err);
+        console.error('Error loading service order:', err);
       } finally {
         setLoading(false);
       }
@@ -34,8 +34,8 @@ const ServiceOrder = () => {
     const dateStr = serviceData.service_date ? new Date(serviceData.service_date).toDateString() : '';
     const shareText = `*${serviceData.title}*\nTheme: ${serviceData.theme}\n\nView the Order of Service here:\n${window.location.href}`;
   
-    // Standard WhatsApp URL format
-    const whatsappUrl = `https://wa.me/${encodeURIComponent(shareText)}`;
+    // FIX: Standard WhatsApp URL format with correctly wrapped variable
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
     window.open(whatsappUrl, '_blank');
   };
 
@@ -79,19 +79,18 @@ const ServiceOrder = () => {
 
   if (loading) return <div style={{ padding: '100px', textAlign: 'center' }}>Loading...</div>;
 
-  // UNIVERSAL HANDLER: Forces order_items into an array even if it's a single object
   const itemsToRender = serviceData?.order_items 
     ? (Array.isArray(serviceData.order_items) 
         ? serviceData.order_items 
-        : [serviceData.order_items]) // Wraps single object in an array
+        : [serviceData.order_items])
     : [];
 
   return (
     <div style={{ background: '#F3F4F6', minHeight: '100vh', paddingBottom: '100px' }}>
       <div style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, #5B21B6 100%)`, padding: '40px 20px', color: 'white', borderRadius: '0 0 32px 32px' }}>
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-          <button onClick={() => navigate(-1)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '12px' }}>← Back</button>
-          <button onClick={shareToWhatsApp} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '12px' }}>📤 Share</button>
+          <button onClick={() => navigate(-1)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '12px', cursor: 'pointer' }}>← Back</button>
+          <button onClick={shareToWhatsApp} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '12px', cursor: 'pointer' }}>📤 Share</button>
         </div>
         <h1 style={{ margin: 0 }}>{serviceData?.title || 'English Service'}</h1>
         <p style={{ opacity: 0.9 }}>{serviceData?.service_date ? new Date(serviceData.service_date).toDateString() : ''}</p>
